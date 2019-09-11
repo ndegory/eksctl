@@ -24,7 +24,6 @@ import (
 	. "github.com/weaveworks/eksctl/integration/runner"
 
 	api "github.com/weaveworks/eksctl/pkg/apis/eksctl.io/v1alpha5"
-	"github.com/weaveworks/eksctl/pkg/authconfigmap"
 	"github.com/weaveworks/eksctl/pkg/ctl/cmdutils"
 	"github.com/weaveworks/eksctl/pkg/eks"
 	"github.com/weaveworks/eksctl/pkg/iam"
@@ -663,10 +662,12 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 
 			Context("and manipulating iam identity mappings", func() {
 				var (
-					role, user          authconfigmap.ARN
+					role, user          iam.ARN
 					expR0, expR1, expU0 string
-					role0, role1        authconfigmap.MapIdentity
-					user0               authconfigmap.MapIdentity
+					role0, role1        iam.Identity
+					user0               iam.Identity
+					admin               = "admin"
+					alice               = "alice"
 				)
 
 				BeforeEach(func() {
@@ -675,41 +676,35 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 					role, err = iam.Parse(roleCanonicalArn)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					role0 = authconfigmap.MapIdentity{
-						ARN: role,
-						Identity: iam.Identity{
-							Username: "admin",
-							Groups:   []string{"system:masters", "system:nodes"},
-						},
+					role0 = iam.Identity{
+						RoleARN:  &role,
+						Username: &admin,
+						Groups:   []string{"system:masters", "system:nodes"},
 					}
-					role1 = authconfigmap.MapIdentity{
-						ARN: role,
-						Identity: iam.Identity{
-							Groups: []string{"system:something"},
-						},
+					role1 = iam.Identity{
+						RoleARN: &role,
+						Groups:  []string{"system:something"},
 					}
 
 					userCanonicalArn := "arn:aws:iam::123456:user/alice"
 					user, err = iam.Parse(userCanonicalArn)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					user0 = authconfigmap.MapIdentity{
-						ARN: user,
-						Identity: iam.Identity{
-							Username: "alice",
-							Groups:   []string{"system:masters", "cryptographers"},
-						},
+					user0 = iam.Identity{
+						UserARN:  &user,
+						Username: &alice,
+						Groups:   []string{"system:masters", "cryptographers"},
 					}
 
-					bs, err := yaml.Marshal([]authconfigmap.MapIdentity{role0})
+					bs, err := yaml.Marshal([]iam.Identity{role0})
 					Expect(err).ShouldNot(HaveOccurred())
 					expR0 = string(bs)
 
-					bs, err = yaml.Marshal([]authconfigmap.MapIdentity{role1})
+					bs, err = yaml.Marshal([]iam.Identity{role1})
 					Expect(err).ShouldNot(HaveOccurred())
 					expR1 = string(bs)
 
-					bs, err = yaml.Marshal([]authconfigmap.MapIdentity{user0})
+					bs, err = yaml.Marshal([]iam.Identity{user0})
 					Expect(err).ShouldNot(HaveOccurred())
 					expU0 = string(bs)
 				})
@@ -739,8 +734,8 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role0.ARN.String(),
-						"--username", role0.Username,
+						"--arn", role.String(),
+						"--username", *role0.Username,
 						"--group", role0.Groups[0],
 						"--group", role0.Groups[1],
 					)
@@ -750,7 +745,7 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role0.ARN.String(),
+						"--arn", role.String(),
 						"-o", "yaml",
 					)
 					Expect(get).To(RunSuccessfullyWithOutputString(MatchYAML(expR0)))
@@ -760,8 +755,8 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", user0.ARN.String(),
-						"--username", user0.Username,
+						"--arn", user.String(),
+						"--username", *user0.Username,
 						"--group", user0.Groups[0],
 						"--group", user0.Groups[1],
 					)
@@ -771,7 +766,7 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", user0.ARN.String(),
+						"--arn", user.String(),
 						"-o", "yaml",
 					)
 					Expect(get).To(RunSuccessfullyWithOutputString(MatchYAML(expU0)))
@@ -781,8 +776,8 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role0.ARN.String(),
-						"--username", role0.Username,
+						"--arn", role.String(),
+						"--username", *role0.Username,
 						"--group", role0.Groups[0],
 						"--group", role0.Groups[1],
 					)
@@ -792,7 +787,7 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role0.ARN.String(),
+						"--arn", role.String(),
 						"-o", "yaml",
 					)
 					Expect(get).To(RunSuccessfullyWithOutputString(MatchYAML(expR0 + expR0)))
@@ -802,8 +797,8 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", user0.ARN.String(),
-						"--username", user0.Username,
+						"--arn", user.String(),
+						"--username", *user0.Username,
 						"--group", user0.Groups[0],
 						"--group", user0.Groups[1],
 					)
@@ -813,18 +808,17 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", user0.ARN.String(),
+						"--arn", user.String(),
 						"-o", "yaml",
 					)
 					Expect(getCmd).To(RunSuccessfullyWithOutputString(MatchYAML(expU0 + expU0)))
 				})
 				It("creates a duplicate role mapping with different identity", func() {
-					eksctlSuccess("create", "iamidentitymapping",
-						createCmd := eksctlCreateCmd.WithArgs(
+					createCmd := eksctlCreateCmd.WithArgs(
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role1.ARN.String(),
+						"--arn", role.String(),
 						"--group", role1.Groups[0],
 					)
 					Expect(createCmd).To(RunSuccessfully())
@@ -833,7 +827,7 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"iamidentitymapping",
 						"--name", clusterName,
 						"--region", region,
-						"--arn", role1.ARN.String(),
+						"--arn", role.String(),
 						"-o", "yaml",
 					)
 					Expect(getCmd).To(RunSuccessfullyWithOutputString(MatchYAML(expR0 + expR0 + expR1)))
@@ -882,6 +876,7 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 						"--arn", role.String(),
 						"-o", "yaml",
 					)
+					Expect(getCmd).ToNot(RunSuccessfully())
 				})
 				It("deletes duplicate user mappings with --all", func() {
 					deleteCmd := eksctlDeleteCmd.WithArgs(
@@ -922,10 +917,10 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 
 					test.WaitForNodesReady(4, commonTimeout)
 
-					nodes := test.ListNodes((metav1.ListOptions{
+					nodes := test.ListNodes(metav1.ListOptions{
 						LabelSelector: api.NodeGroupNameLabel + "=" + initNG,
-					}))
-					allNodes := test.ListNodes((metav1.ListOptions{}))
+					})
+					allNodes := test.ListNodes(metav1.ListOptions{})
 					Expect(len(nodes.Items)).To(Equal(4))
 					Expect(len(allNodes.Items)).To(Equal(4))
 				})
@@ -949,9 +944,9 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 
 				test.WaitForNodesReady(1, commonTimeout)
 
-				nodes := test.ListNodes((metav1.ListOptions{
+				nodes := test.ListNodes(metav1.ListOptions{
 					LabelSelector: api.NodeGroupNameLabel + "=" + initNG,
-				}))
+				})
 
 				Expect(len(nodes.Items)).To(Equal(1))
 			})
