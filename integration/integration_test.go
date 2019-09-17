@@ -55,7 +55,7 @@ func init() {
 	flag.StringVar(&privateSSHKeyPath, "eksctl.git.sshkeypath", defaultPrivateSSHKeyPath, fmt.Sprintf("Path to the SSH key to use for Git operations (default: %s)", defaultPrivateSSHKeyPath))
 
 	eksctlCmd = runner.NewCmd(eksctlPath).
-		WithArgs("--region", region).
+		// WithArgs("--region", region).
 		WithTimeout(30 * time.Minute)
 
 	eksctlCreateCmd = eksctlCmd.
